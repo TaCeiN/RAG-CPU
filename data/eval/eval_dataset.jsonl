@@ -1,0 +1,5 @@
+{"id":"r1","query":"Какой маршрут выбирает система для вопросов о переписке?","expected_route":"rag","expected_sources":["data\\demo_docs\\architecture_notes.md"]}
+{"id":"r2","query":"привет","expected_route":"direct"}
+{"id":"r3","query":"Что я сказал выше?","expected_route":"memory"}
+{"id":"r4","query":"Нужно ли использовать .venv для локального запуска?","expected_route":"rag","expected_sources":["data\\demo_docs\\deploy.md"]}
+

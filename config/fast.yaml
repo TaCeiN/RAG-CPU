@@ -1,0 +1,35 @@
+﻿llm:
+  model: "hf.co/Vikhrmodels/Vikhr-Qwen-2.5-1.5B-Instruct-GGUF:Q4_K_M"
+  endpoint: "http://localhost:11434"
+  timeout_seconds: 120
+
+embedding:
+  model_path: "models/e5-small-en-ru"
+  query_prompt: "query: "
+  query_mode: "prefix_text"
+
+rerank:
+  model_path: "models/cross-encoder-russian-msmarco"
+  kind: "cross_encoder"
+  query_prompt: ""
+  min_score: 0.15
+  top_n: 2
+
+chunk:
+  size: 360
+  overlap: 54
+  min_size: 300
+  max_size: 800
+
+retrieval:
+  top_k: 12
+
+memory:
+  history_n: 8
+  enable_summary: false
+
+limits:
+  max_context_tokens: 900
+
+paths:
+  history_file: "chat_history.jsonl"

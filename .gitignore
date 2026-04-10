@@ -1,0 +1,34 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Local runtime artifacts
+app_data/
+.hf_cache/
+.tmp_pytest/
+pytest-cache-files-*/
+.rag_index/
+reports/
+*.log
+
+# Local models (heavy)
+models/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,216 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG Service</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --accent:#22c55e; --text:#e5e7eb; --danger:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", sans-serif; background: radial-gradient(circle at top right,#1e293b,var(--bg)); color: var(--text); }
+    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 12px; height: 100vh; padding: 12px; }
+    .panel { background: rgba(17,24,39,.95); border:1px solid #334155; border-radius: 12px; padding: 12px; overflow: auto; }
+    h2,h3 { margin: 0 0 10px 0; }
+    input,button,textarea { width: 100%; border-radius: 8px; border:1px solid #334155; background:#0b1220; color:var(--text); padding:8px; margin:6px 0; }
+    button { cursor: pointer; background: #1f2937; }
+    button.primary { background: #166534; border-color:#16a34a; }
+    button.danger { background:#7f1d1d; border-color:#b91c1c; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; }
+    .list { display:flex; flex-direction:column; gap:6px; }
+    .item { border:1px solid #334155; border-radius:8px; padding:8px; cursor:pointer; }
+    .item.active { border-color:#16a34a; background:#052e16; }
+    .msg { border:1px solid #334155; border-radius:8px; padding:8px; margin-bottom:8px; white-space:pre-wrap; }
+    .msg.user { border-color:#0ea5e9; }
+    .msg.assistant { border-color:#22c55e; }
+    .hidden { display:none; }
+    .status { font-size:12px; color:#a3e635; }
+    @media (max-width: 980px) { .wrap { grid-template-columns: 1fr; height:auto; min-height:100vh; } }
+  </style>
+</head>
+<body>
+  <div id="authView" class="panel" style="max-width:520px;margin:24px auto;">
+    <h2>RAG Service</h2>
+    <div class="muted">Регистрация и вход</div>
+    <input id="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Пароль" />
+    <div class="row">
+      <button id="signupBtn" class="primary">Signup</button>
+      <button id="loginBtn">Login</button>
+    </div>
+    <div id="authStatus" class="muted"></div>
+  </div>
+
+  <div id="appView" class="wrap hidden">
+    <section class="panel">
+      <h3>Чаты</h3>
+      <input id="newChatTitle" placeholder="Название чата" />
+      <button id="createChatBtn" class="primary">Создать чат</button>
+      <div id="chats" class="list"></div>
+      <button id="logoutBtn" class="danger">Logout</button>
+    </section>
+
+    <section class="panel">
+      <h3 id="chatTitle">Чат не выбран</h3>
+      <div class="row">
+        <input id="fileInput" type="file" />
+        <button id="uploadBtn">Upload</button>
+      </div>
+      <div id="files" class="list"></div>
+      <div id="jobs" class="muted"></div>
+      <hr style="border-color:#334155;" />
+      <div id="messages"></div>
+      <textarea id="query" rows="3" placeholder="Введите вопрос"></textarea>
+      <button id="askBtn" class="primary">Спросить</button>
+      <div id="askMeta" class="status"></div>
+    </section>
+  </div>
+
+<script>
+let accessToken = localStorage.getItem('access_token') || '';
+let refreshToken = localStorage.getItem('refresh_token') || '';
+let currentChatId = null;
+
+function showAuth(){ document.getElementById('authView').classList.remove('hidden'); document.getElementById('appView').classList.add('hidden'); }
+function showApp(){ document.getElementById('authView').classList.add('hidden'); document.getElementById('appView').classList.remove('hidden'); }
+function setStatus(id, text){ document.getElementById(id).textContent = text; }
+
+async function api(path, method='GET', body=null, auth=true){
+  const headers = {'Content-Type':'application/json'};
+  if (!body || body instanceof FormData) delete headers['Content-Type'];
+  if (auth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const res = await fetch(path,{method,headers,body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined});
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`${res.status} ${t}`);
+  }
+  return res.json();
+}
+
+async function signup(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const data = await api('/auth/signup','POST',{email,password}, false);
+  accessToken = data.access_token; refreshToken = data.refresh_token;
+  localStorage.setItem('access_token', accessToken); localStorage.setItem('refresh_token', refreshToken);
+  showApp(); await loadChats();
+}
+
+async function login(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const data = await api('/auth/login','POST',{email,password}, false);
+  accessToken = data.access_token; refreshToken = data.refresh_token;
+  localStorage.setItem('access_token', accessToken); localStorage.setItem('refresh_token', refreshToken);
+  showApp(); await loadChats();
+}
+
+async function logout(){
+  try { if (refreshToken) await api('/auth/logout','POST',{refresh_token:refreshToken}); } catch(e){}
+  accessToken=''; refreshToken=''; currentChatId=null;
+  localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token');
+  showAuth();
+}
+
+async function loadChats(){
+  const chats = await api('/chats');
+  const root = document.getElementById('chats');
+  root.innerHTML = '';
+  chats.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'item' + (c.id === currentChatId ? ' active':'');
+    d.textContent = `${c.title} (#${c.id})`;
+    d.onclick = async () => { currentChatId = c.id; await renderChat(); };
+    root.appendChild(d);
+  });
+}
+
+async function createChat(){
+  const title = document.getElementById('newChatTitle').value.trim() || 'Новый чат';
+  const c = await api('/chats','POST',{title});
+  currentChatId = c.id;
+  await loadChats();
+  await renderChat();
+}
+
+async function renderChat(){
+  await loadChats();
+  if (!currentChatId) return;
+  const c = await api(`/chats/${currentChatId}`);
+  document.getElementById('chatTitle').textContent = `${c.title} (#${c.id})`;
+  await loadFiles();
+  await loadMessages();
+}
+
+async function loadFiles(){
+  const files = await api(`/chats/${currentChatId}/files`);
+  const root = document.getElementById('files');
+  root.innerHTML = '';
+  files.forEach(f => {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = `<b>${f.name}</b> [${f.status}]<br><span class="muted">summary=${f.summary_status || 'n/a'}</span>${f.summary ? `<br><span class="muted">${f.summary}</span>` : ''}`;
+    root.appendChild(d);
+  });
+}
+
+async function loadMessages(){
+  const msgs = await api(`/chats/${currentChatId}/messages`);
+  const root = document.getElementById('messages');
+  root.innerHTML = '';
+  msgs.forEach(m => {
+    const d = document.createElement('div');
+    d.className = `msg ${m.role}`;
+    d.innerHTML = `<b>${m.role}</b>\n${m.content}`;
+    root.appendChild(d);
+  });
+  root.scrollTop = root.scrollHeight;
+}
+
+async function uploadFile(){
+  if (!currentChatId) return alert('Выберите чат');
+  const fi = document.getElementById('fileInput');
+  if (!fi.files.length) return;
+  const fd = new FormData();
+  fd.append('uploaded', fi.files[0]);
+  const data = await api(`/chats/${currentChatId}/files`, 'POST', fd);
+  setStatus('jobs', `Job #${data.job_id}: pending`);
+  pollJob(data.job_id);
+}
+
+async function pollJob(jobId){
+  const tick = async () => {
+    const j = await api(`/jobs/${jobId}`);
+    setStatus('jobs', `Job #${j.id}: ${j.status}${j.error_text ? ' | ' + j.error_text : ''}`);
+    if (j.status === 'pending' || j.status === 'running') setTimeout(tick, 1500);
+    else await loadFiles();
+  };
+  tick();
+}
+
+async function ask(){
+  if (!currentChatId) return alert('Выберите чат');
+  const query = document.getElementById('query').value.trim();
+  if (!query) return;
+  setStatus('askMeta', 'Обработка...');
+  const data = await api(`/chats/${currentChatId}/ask`, 'POST', {query});
+  setStatus('askMeta', `route=${data.route}, latency=${data.latency_ms}ms, sources=${(data.retrieved_sources||[]).length}`);
+  document.getElementById('query').value = '';
+  await loadMessages();
+}
+
+document.getElementById('signupBtn').onclick = () => signup().catch(e => setStatus('authStatus', e.message));
+document.getElementById('loginBtn').onclick = () => login().catch(e => setStatus('authStatus', e.message));
+document.getElementById('logoutBtn').onclick = () => logout();
+document.getElementById('createChatBtn').onclick = () => createChat().catch(e => alert(e.message));
+document.getElementById('uploadBtn').onclick = () => uploadFile().catch(e => alert(e.message));
+document.getElementById('askBtn').onclick = () => ask().catch(e => alert(e.message));
+
+(async function init(){
+  if (!accessToken) return showAuth();
+  try { await api('/auth/me'); showApp(); await loadChats(); }
+  catch { showAuth(); }
+})();
+</script>
+</body>
+</html>

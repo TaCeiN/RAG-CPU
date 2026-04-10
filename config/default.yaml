@@ -1,0 +1,36 @@
+﻿llm:
+  model: "hf.co/Vikhrmodels/QVikhr-3-1.7B-Instruction-noreasoning-GGUF:Q4_K_M"
+  endpoint: "http://localhost:11434"
+  timeout_seconds: 180
+
+embedding:
+  model_path: "models/multiingual-e5-small"
+  query_prompt: "query: "
+  query_mode: "prefix_text"
+
+rerank:
+  model_path: "models/cross-encoder-russian-msmarco"
+  kind: "cross_encoder"
+  query_prompt: ""
+  min_score: 0.15
+  top_n: 3
+
+chunk:
+  size: 400
+  overlap: 60
+  min_size: 300
+  max_size: 800
+
+retrieval:
+  top_k: 20
+
+memory:
+  history_n: 10
+  enable_summary: false
+
+limits:
+  max_context_tokens: 1200
+
+paths:
+  history_file: "chat_history.jsonl"
+
